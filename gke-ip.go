@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"golang.org/x/net/context"
@@ -26,15 +27,21 @@ import (
 
 func main() {
 
-	project := os.Getenv("GCP_PROJECT")
+	projectID := os.Getenv("GCP_PROJECT")
 
-	if project == "" {
+	if projectID == "" {
 		log.Fatal("Project is not set")
 	}
 	clusterZone := os.Getenv("GCP_KUBE_MASTER_ZONE")
 
 	if clusterZone == "" {
 		log.Fatal("Cluster Zone is not set")
+	}
+
+	clusterID := os.Getenv("GCP_KUBE_CLUSTER_ID")
+
+	if clusterID == "" {
+		log.Fatal("Cluster ID is not set")
 	}
 
 	ctx := context.Background()
@@ -49,30 +56,31 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Deprecated. The Google Developers Console [project ID or project
-	// number](https://support.google.com/cloud/answer/6158840).
-	// This field has been deprecated and replaced by the name field.
-	projectId := project // TODO: Update placeholder value.
+	existingBlocks, err := GetExistingCidrBlock(projectID, clusterZone, clusterID, c, containerService)
 
-	// Deprecated. The name of the Google Compute Engine
-	// [zone](/compute/docs/zones#available) in which the cluster
-	// resides.
-	// This field has been deprecated and replaced by the name field.
-	zone := "us-central1-c" // TODO: Update placeholder value.
-
-	// Deprecated. The name of the cluster to upgrade.
-	// This field has been deprecated and replaced by the name field.
-	clusterId := "projects-cluster" // TODO: Update placeholder value.
-
+	if err != nil {
+		log.Fatal(err)
+	}
 	//https://godoc.org/google.golang.org/api/container/v1#ClusterUpdate
 	//https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/update
 	//https://cloud.google.com/kubernetes-engine/docs/how-to/authorized-networks#api_2
+
+	var updatedCidirBlocks []*container.CidrBlock
 	cidrBlock := container.CidrBlock{
-		CidrBlock:   "47.221.172.101/32",
-		DisplayName: "NirajHome",
+		CidrBlock:   "123.123.123.123/32",
+		DisplayName: "TestHome",
 	}
+
+	for _, c := range existingBlocks {
+		if c.DisplayName != cidrBlock.DisplayName {
+			updatedCidirBlocks = append(updatedCidirBlocks, c)
+		}
+	}
+
+	updatedCidirBlocks = append(updatedCidirBlocks, &cidrBlock)
+
 	mAuthNetworkConfig := &container.MasterAuthorizedNetworksConfig{
-		CidrBlocks: []*container.CidrBlock{&cidrBlock},
+		CidrBlocks: updatedCidirBlocks,
 		Enabled:    true,
 	}
 	clusterUpdate := container.ClusterUpdate{
@@ -86,7 +94,7 @@ func main() {
 		// will be replaced.
 	}
 
-	resp, err := containerService.Projects.Zones.Clusters.Update(projectId, zone, clusterId, rb).Context(ctx).Do()
+	resp, err := containerService.Projects.Zones.Clusters.Update(projectID, clusterZone, clusterID, rb).Context(ctx).Do()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -96,6 +104,13 @@ func main() {
 }
 
 //https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/get?apix_params=%7B%22projectId%22%3A%22agile-terra-275621%22%2C%22zone%22%3A%22us-central1-c%22%2C%22clusterId%22%3A%22projects-cluster%22%7D
-func GetExistingCidrBlock() {
+func GetExistingCidrBlock(projectID string, zone string, clusterID string, client *http.Client, containerService *container.Service) ([]*container.CidrBlock, error) {
+	ctx := context.Background()
+	resp, err := containerService.Projects.Zones.Clusters.Get(projectID, zone, clusterID).Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.MasterAuthorizedNetworksConfig.CidrBlocks, err
 
 }
