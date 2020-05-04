@@ -17,14 +17,26 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
-	"github.com/docker/docker/api/types/container"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/container/v1"
 )
 
 func main() {
+
+	project := os.Getenv("GCP_PROJECT")
+
+	if project == "" {
+		log.Fatal("Project is not set")
+	}
+	clusterZone := os.Getenv("GCP_KUBE_MASTER_ZONE")
+
+	if clusterZone == "" {
+		log.Fatal("Cluster Zone is not set")
+	}
+
 	ctx := context.Background()
 
 	c, err := google.DefaultClient(ctx, container.CloudPlatformScope)
@@ -40,25 +52,36 @@ func main() {
 	// Deprecated. The Google Developers Console [project ID or project
 	// number](https://support.google.com/cloud/answer/6158840).
 	// This field has been deprecated and replaced by the name field.
-	projectId := "my-project-id" // TODO: Update placeholder value.
+	projectId := project // TODO: Update placeholder value.
 
 	// Deprecated. The name of the Google Compute Engine
 	// [zone](/compute/docs/zones#available) in which the cluster
 	// resides.
 	// This field has been deprecated and replaced by the name field.
-	zone := "my-zone" // TODO: Update placeholder value.
+	zone := "us-central1-c" // TODO: Update placeholder value.
 
 	// Deprecated. The name of the cluster to upgrade.
 	// This field has been deprecated and replaced by the name field.
-	clusterId := "my-cluster-id" // TODO: Update placeholder value.
+	clusterId := "projects-cluster" // TODO: Update placeholder value.
 
 	//https://godoc.org/google.golang.org/api/container/v1#ClusterUpdate
 	//https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/update
 	//https://cloud.google.com/kubernetes-engine/docs/how-to/authorized-networks#api_2
-	clusterUpdate = container.ClusterUpdate{
-		DesiredMasterAuthorizedNetworksConfig: 
+	cidrBlock := container.CidrBlock{
+		CidrBlock:   "47.221.172.101/32",
+		DisplayName: "NirajHome",
 	}
+	mAuthNetworkConfig := &container.MasterAuthorizedNetworksConfig{
+		CidrBlocks: []*container.CidrBlock{&cidrBlock},
+		Enabled:    true,
+	}
+	clusterUpdate := container.ClusterUpdate{
+
+		DesiredMasterAuthorizedNetworksConfig: mAuthNetworkConfig,
+	}
+
 	rb := &container.UpdateClusterRequest{
+		Update: &clusterUpdate,
 		// TODO: Add desired fields of the request body. All existing fields
 		// will be replaced.
 	}
@@ -70,4 +93,8 @@ func main() {
 
 	// TODO: Change code below to process the `resp` object:
 	fmt.Printf("%#v\n", resp)
+}
+
+func GetExistingCidrBlock() {
+
 }
