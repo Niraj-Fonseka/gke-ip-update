@@ -95,6 +95,7 @@ func main() {
 	fmt.Printf("%#v\n", resp)
 }
 
+//https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/get?apix_params=%7B%22projectId%22%3A%22agile-terra-275621%22%2C%22zone%22%3A%22us-central1-c%22%2C%22clusterId%22%3A%22projects-cluster%22%7D
 func GetExistingCidrBlock() {
 
 }
