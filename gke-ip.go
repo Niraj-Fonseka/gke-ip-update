@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/docker/docker/api/types/container"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/container/v1"
@@ -51,6 +52,12 @@ func main() {
 	// This field has been deprecated and replaced by the name field.
 	clusterId := "my-cluster-id" // TODO: Update placeholder value.
 
+	//https://godoc.org/google.golang.org/api/container/v1#ClusterUpdate
+	//https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/update
+	//https://cloud.google.com/kubernetes-engine/docs/how-to/authorized-networks#api_2
+	clusterUpdate = container.ClusterUpdate{
+		DesiredMasterAuthorizedNetworksConfig: 
+	}
 	rb := &container.UpdateClusterRequest{
 		// TODO: Add desired fields of the request body. All existing fields
 		// will be replaced.
