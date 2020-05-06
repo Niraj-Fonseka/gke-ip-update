@@ -35,7 +35,7 @@ func main() {
 	}
 	saveIP(ip)
 
-	setCreds()
+	setCreds(*CredentialPath)
 	setGKEIP(ip, *NetworkDisplayName)
 
 	wg := &sync.WaitGroup{}
@@ -118,7 +118,7 @@ func fetchIP() (string, error) {
 	return cleanedIP, nil
 }
 
-func setCreds() {
+func setCreds(path string) {
 	log.Println("Setting Google Credentials ")
 	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/home/hungryotter/go/src/gke-ip-update/sa.json"); err != nil {
 		log.Fatal(err)
@@ -174,7 +174,7 @@ func setGKEIP(ip, displayName string) {
 		Update: &clusterUpdate,
 	}
 
-	_, err := containerService.Projects.Zones.Clusters.Update(*ProjectID, *ClusterZone, *ClusterID, rb).Context(ctx).Do()
+	_, err = containerService.Projects.Zones.Clusters.Update(*ProjectID, *ClusterZone, *ClusterID, rb).Context(ctx).Do()
 	if err != nil {
 		log.Fatal(err)
 	}
