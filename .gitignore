@@ -1,2 +1,3 @@
 *.json
 .env
+gke-ip-update
