@@ -21,6 +21,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
@@ -38,17 +40,29 @@ var (
 func main() {
 	Client = &http.Client{}
 	HandleArgs()
-	ip, err := fetchIP()
 
-	if err != nil {
-		log.Fatal(err)
-	}
+	wg := &sync.WaitGroup{}
 
-	fmt.Println("IP ", ip)
-	//SetCreds()
+	wg.Add(1)
+	go Process(wg)
 
+	wg.Wait()
 }
 
+func Process(wg *sync.WaitGroup) {
+
+	for {
+		ip, err := fetchIP()
+
+		if err != nil {
+			log.Println(err)
+			break
+		}
+		fmt.Println("IP ", ip)
+		time.Sleep(10 * time.Second)
+	}
+	wg.Done()
+}
 func fetchIP() (string, error) {
 	resp, err := Client.Get("http://checkip.amazonaws.com/")
 
