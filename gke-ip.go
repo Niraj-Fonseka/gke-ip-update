@@ -17,6 +17,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -31,11 +32,39 @@ var (
 	ProjectID      *string
 	ClusterZone    *string
 	ClusterID      *string
+	Client         *http.Client
 )
 
 func main() {
+	Client = &http.Client{}
 	HandleArgs()
+	ip, err := fetchIP()
 
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("IP ", ip)
+	//SetCreds()
+
+}
+
+func fetchIP() (string, error) {
+	resp, err := Client.Get("http://checkip.amazonaws.com/")
+
+	if err != nil {
+		return "", err
+	}
+
+	defer resp.Body.Close()
+
+	ip, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		return "", err
+	}
+
+	return string(ip), nil
 }
 
 func SetCreds() {
@@ -56,14 +85,11 @@ func SetCreds() {
 		log.Fatal(err)
 	}
 
-	existingBlocks, err := GetExistingCidrBlock(projectID, clusterZone, clusterID, c, containerService)
+	existingBlocks, err := GetExistingCidrBlock(*ProjectID, *ClusterZone, *ClusterID, c, containerService)
 
 	if err != nil {
 		log.Fatal(err)
 	}
-	//https://godoc.org/google.golang.org/api/container/v1#ClusterUpdate
-	//https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/update
-	//https://cloud.google.com/kubernetes-engine/docs/how-to/authorized-networks#api_2
 
 	var updatedCidirBlocks []*container.CidrBlock
 	cidrBlock := container.CidrBlock{
@@ -94,7 +120,7 @@ func SetCreds() {
 		// will be replaced.
 	}
 
-	resp, err := containerService.Projects.Zones.Clusters.Update(projectID, clusterZone, clusterID, rb).Context(ctx).Do()
+	resp, err := containerService.Projects.Zones.Clusters.Update(*ProjectID, *ClusterZone, *ClusterID, rb).Context(ctx).Do()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,7 +131,7 @@ func SetCreds() {
 func HandleArgs() {
 	CredentialPath = flag.String("path", "", "path for the google application credentials")
 	ProjectID = flag.String("project", "", "project id")
-	ClusterID = flag.String("string", "", "cluster id")
+	ClusterID = flag.String("cluster", "", "clusterid")
 	ClusterZone = flag.String("zone", "", "zone where the master lives")
 	flag.Parse()
 
