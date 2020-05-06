@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,26 +31,35 @@ import (
 )
 
 var (
-	CredentialPath *string
-	ProjectID      *string
-	ClusterZone    *string
-	ClusterID      *string
-	Client         *http.Client
+	CredentialPath     *string
+	ProjectID          *string
+	ClusterZone        *string
+	ClusterID          *string
+	Client             *http.Client
+	NetworkDisplayName *string
 )
 
 func main() {
 	Client = &http.Client{}
-	HandleArgs()
+	handleArgs()
+	initializeLocalStorage()
+	ip, err := fetchIP()
+	if err != nil {
+		log.Fatal(err)
+	}
+	saveIP(ip)
+
+	setCreds()
+	setGKEIP(ip, *NetworkDisplayName)
 
 	wg := &sync.WaitGroup{}
-
 	wg.Add(1)
-	go Process(wg)
+	go process(wg)
 
 	wg.Wait()
 }
 
-func Process(wg *sync.WaitGroup) {
+func process(wg *sync.WaitGroup) {
 
 	for {
 		ip, err := fetchIP()
@@ -58,11 +68,51 @@ func Process(wg *sync.WaitGroup) {
 			log.Println(err)
 			break
 		}
-		fmt.Println("IP ", ip)
+		savedIP := getIP()
+		if savedIP != ip {
+			saveIP(ip)
+			log.Println("Ip change detected..")
+			setGKEIP(ip, *NetworkDisplayName)
+		}
 		time.Sleep(10 * time.Second)
 	}
 	wg.Done()
 }
+
+func initializeLocalStorage() {
+	homePath := os.Getenv("HOME")
+	if homePath == "" {
+		log.Fatal("Unable to get the path for HOME")
+	}
+
+	if _, err := os.Stat(homePath + "/.gke_ip_update"); os.IsNotExist(err) {
+		// path/to/whatever does not exist
+		err := os.Mkdir(homePath+"/.gke_ip_update", 0755)
+		if err != nil {
+			log.Fatal("Unable to create ,.gke_ip_update")
+		}
+	}
+
+}
+
+func saveIP(ip string) {
+	err := ioutil.WriteFile(os.Getenv("HOME")+"/.gke_ip_update/ip.txt", []byte(ip), 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func getIP() string {
+	ip, err := ioutil.ReadFile(os.Getenv("HOME") + "/.gke_ip_update/ip.txt")
+
+	if err == os.ErrNotExist {
+		log.Fatal(err)
+	}
+
+	cleanedIP := strings.TrimSuffix(string(ip), "\n")
+	return cleanedIP
+}
+
 func fetchIP() (string, error) {
 	resp, err := Client.Get("http://checkip.amazonaws.com/")
 
@@ -78,15 +128,19 @@ func fetchIP() (string, error) {
 		return "", err
 	}
 
-	return string(ip), nil
+	cleanedIP := strings.TrimSuffix(string(ip), "\n")
+
+	return cleanedIP, nil
 }
 
-func SetCreds() {
+func setCreds() {
 	log.Println("Setting Google Credentials ")
 	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/home/hungryotter/go/src/gke-ip-update/sa.json"); err != nil {
 		log.Fatal(err)
 	}
+}
 
+func setGKEIP(ip, displayName string) {
 	ctx := context.Background()
 
 	c, err := google.DefaultClient(ctx, container.CloudPlatformScope)
@@ -107,13 +161,16 @@ func SetCreds() {
 
 	var updatedCidirBlocks []*container.CidrBlock
 	cidrBlock := container.CidrBlock{
-		CidrBlock:   "123.123.123.123/32",
-		DisplayName: "TestHome",
+		CidrBlock:   fmt.Sprintf("%s/32", ip),
+		DisplayName: displayName,
 	}
 
 	for _, c := range existingBlocks {
 		if c.DisplayName != cidrBlock.DisplayName {
 			updatedCidirBlocks = append(updatedCidirBlocks, c)
+		}
+		if c.CidrBlock == fmt.Sprintf("%s/32", ip) {
+			return
 		}
 	}
 
@@ -142,11 +199,13 @@ func SetCreds() {
 	// TODO: Change code below to process the `resp` object:
 	fmt.Printf("%#v\n", resp)
 }
-func HandleArgs() {
+
+func handleArgs() {
 	CredentialPath = flag.String("path", "", "path for the google application credentials")
 	ProjectID = flag.String("project", "", "project id")
 	ClusterID = flag.String("cluster", "", "clusterid")
 	ClusterZone = flag.String("zone", "", "zone where the master lives")
+	NetworkDisplayName = flag.String("network_name", "", "DisplayName for the master authroized network")
 	flag.Parse()
 
 	if *CredentialPath == "" {
@@ -164,6 +223,11 @@ func HandleArgs() {
 	if *ClusterID == "" {
 		log.Fatal("ClusterID is not provided ")
 	}
+
+	if *NetworkDisplayName == "" {
+		log.Fatal("DisplayName is not provided")
+	}
+
 	fmt.Printf("Credentials Path : %s , ProjectID : %s , ClusterZone : %s , ClusteID : %s \n", *CredentialPath, *ProjectID, *ClusterZone, *ClusterID)
 }
 
