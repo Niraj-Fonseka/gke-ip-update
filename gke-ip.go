@@ -27,11 +27,11 @@ var (
 )
 
 func main() {
-	initializeLogs()
 	defer logFile.Close()
 	Client = &http.Client{}
 	handleArgs()
 	initializeLocalStorage()
+	initializeLogs()
 	ip, err := fetchIP()
 	if err != nil {
 		log.Fatal(err)
@@ -43,15 +43,22 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	go process(wg)
+	go run(wg)
 
 	wg.Wait()
 }
 
 func initializeLogs() {
+
+	if _, err := os.Stat(os.Getenv("HOME") + "/.gke_ip_update/gke_ip_update.log"); os.IsNotExist(err) {
+		if _, err := os.Create(os.Getenv("HOME") + "/.gke_ip_update/gke_ip_update.log"); err != nil {
+			log.Fatal("Cant Create log file : ", err)
+		}
+
+	}
 	f, err := os.OpenFile(os.Getenv("HOME")+"/.gke_ip_update/gke_ip_update.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatal("Unable to initialize the log file")
+		log.Fatal("Unable to initialize the log file : ", err)
 	}
 
 	logFile = f
@@ -63,7 +70,7 @@ func writeLog(message string) {
 	}
 }
 
-func process(wg *sync.WaitGroup) {
+func run(wg *sync.WaitGroup) {
 
 	for {
 		ip, err := fetchIP()
@@ -74,8 +81,8 @@ func process(wg *sync.WaitGroup) {
 		}
 		savedIP := getIP()
 		if savedIP != ip {
+			writeLog(fmt.Sprintf("IP change detected from : %s , to : %s ", savedIP, ip))
 			saveIP(ip)
-			log.Println("Ip change detected..")
 			setGKEIP(ip, *NetworkDisplayName)
 		}
 		time.Sleep(10 * time.Second)
@@ -92,7 +99,7 @@ func initializeLocalStorage() {
 	if _, err := os.Stat(homePath + "/.gke_ip_update"); os.IsNotExist(err) {
 		err := os.Mkdir(homePath+"/.gke_ip_update", 0755)
 		if err != nil {
-			log.Fatal("Unable to create ,.gke_ip_update")
+			log.Fatal("Unable to create .gke_ip_update directory")
 		}
 	}
 
@@ -137,7 +144,6 @@ func fetchIP() (string, error) {
 }
 
 func setCreds(path string) {
-	log.Println("Setting Google Credentials ")
 	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/home/hungryotter/go/src/gke-ip-update/sa.json"); err != nil {
 		log.Fatal(err)
 	}
@@ -197,7 +203,7 @@ func setGKEIP(ip, displayName string) {
 		log.Fatal(err)
 	}
 
-	log.Println("IP successfully updated in the gke cluster")
+	writeLog("IP successfully updated in the gke cluster")
 }
 
 func handleArgs() {
@@ -228,7 +234,6 @@ func handleArgs() {
 		log.Fatal("DisplayName is not provided")
 	}
 
-	fmt.Printf("Credentials Path : %s , ProjectID : %s , ClusterZone : %s , ClusteID : %s \n", *CredentialPath, *ProjectID, *ClusterZone, *ClusterID)
 }
 
 //https://cloud.google.com/kubernetes-engine/docs/reference/rest/v1/projects.zones.clusters/get?apix_params=%7B%22projectId%22%3A%22agile-terra-275621%22%2C%22zone%22%3A%22us-central1-c%22%2C%22clusterId%22%3A%22projects-cluster%22%7D
