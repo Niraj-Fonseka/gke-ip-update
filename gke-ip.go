@@ -26,26 +26,28 @@ var (
 	logFile            *os.File
 )
 
-func main() {
-	defer logFile.Close()
-
-	client = &http.Client{}
-	handleArgs()
+func init() {
 	initializeLocalStorage()
 	initializeLogs()
+}
+
+func main() {
+	defer logFile.Close()
+	client = &http.Client{}
+	handleArgs()
 	ip, err := findPublicIP()
 	if err != nil {
-		log.Fatal(err)
+		writeLog(err.Error())
+		os.Exit(1)
 	}
-	saveIP(ip)
 
+	saveIP(ip)
 	setCreds(*credentialPath)
 	setGKEIP(ip, *networkDisplayName)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go run(wg)
-
 	wg.Wait()
 }
 
@@ -78,7 +80,6 @@ func run(wg *sync.WaitGroup) {
 
 	for {
 		ip, err := findPublicIP()
-
 		if err != nil {
 			log.Println(err)
 			break
@@ -87,7 +88,11 @@ func run(wg *sync.WaitGroup) {
 		if savedIP != ip {
 			writeLog(fmt.Sprintf("IP change detected from : %s , to : %s ", savedIP, ip))
 			saveIP(ip)
-			setGKEIP(ip, *networkDisplayName)
+			err := setGKEIP(ip, *networkDisplayName)
+			if err != nil {
+				writeLog("Unable to update ip in the GKE cluster : " + err.Error())
+			}
+
 		}
 		time.Sleep(3 * time.Minute)
 	}
@@ -146,9 +151,7 @@ func findPublicIP() (string, error) {
 		return "", err
 	}
 
-	cleanedIP := strings.TrimSuffix(string(ip), "\n")
-
-	return cleanedIP, nil
+	return strings.TrimSuffix(string(ip), "\n"), nil
 }
 
 //get GOOGLE_APPLICATION_CREDENTIALS using the path given by the user
@@ -159,22 +162,24 @@ func setCreds(path string) {
 }
 
 //if the IP change has been detected update the list of Master Authroized Networks in the GKE cluster
-func setGKEIP(ip, displayName string) {
+func setGKEIP(ip, displayName string) error {
 	ctx := context.Background()
 
 	c, err := google.DefaultClient(ctx, container.CloudPlatformScope)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	containerService, err := container.New(c)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	existingBlocks, err := getExistingCidrBlock(*projectID, *clusterZone, *clusterID, c, containerService)
 
 	if err != nil {
+		writeLog(err.Error())
+
 		log.Fatal(err)
 	}
 
@@ -189,7 +194,7 @@ func setGKEIP(ip, displayName string) {
 			updatedCidirBlocks = append(updatedCidirBlocks, c)
 		}
 		if c.CidrBlock == fmt.Sprintf("%s/32", ip) {
-			return
+			return nil
 		}
 	}
 
@@ -210,10 +215,11 @@ func setGKEIP(ip, displayName string) {
 
 	_, err = containerService.Projects.Zones.Clusters.Update(*projectID, *clusterZone, *clusterID, rb).Context(ctx).Do()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	writeLog("IP successfully updated in the gke cluster")
+	return nil
 }
 
 //Parsing arguments at the start of the app
