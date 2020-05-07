@@ -23,9 +23,12 @@ var (
 	ClusterID          *string
 	Client             *http.Client
 	NetworkDisplayName *string
+	logFile            *os.File
 )
 
 func main() {
+	initializeLogs()
+	defer logFile.Close()
 	Client = &http.Client{}
 	handleArgs()
 	initializeLocalStorage()
@@ -43,6 +46,21 @@ func main() {
 	go process(wg)
 
 	wg.Wait()
+}
+
+func initializeLogs() {
+	f, err := os.OpenFile(os.Getenv("HOME")+"/.gke_ip_update/gke_ip_update.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal("Unable to initialize the log file")
+	}
+
+	logFile = f
+}
+
+func writeLog(message string) {
+	if _, err := logFile.Write([]byte(message)); err != nil {
+		log.Fatal("Unable to write to a log file")
+	}
 }
 
 func process(wg *sync.WaitGroup) {
