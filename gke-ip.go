@@ -43,8 +43,10 @@ func main() {
 
 	saveIP(ip)
 	setCreds(*credentialPath)
-	setGKEIP(ip, *networkDisplayName)
-
+	err = setGKEIP(ip, *networkDisplayName)
+	if err != nil {
+		log.Fatal(err)
+	}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go run(wg)
@@ -86,11 +88,11 @@ func run(wg *sync.WaitGroup) {
 		}
 		savedIP := getIP()
 		if savedIP != ip {
-			writeLog(fmt.Sprintf("IP change detected from : %s , to : %s ", savedIP, ip))
+			writeLog(fmt.Sprintf("IP change detected from : %s , to : %s \n", savedIP, ip))
 			saveIP(ip)
 			err := setGKEIP(ip, *networkDisplayName)
 			if err != nil {
-				writeLog("Unable to update ip in the GKE cluster : " + err.Error())
+				writeLog(fmt.Sprintf("Unable to update ip in the GKE cluster : %s \n", err.Error()))
 			}
 
 		}
@@ -156,9 +158,12 @@ func findPublicIP() (string, error) {
 
 //get GOOGLE_APPLICATION_CREDENTIALS using the path given by the user
 func setCreds(path string) {
-	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/home/hungryotter/go/src/gke-ip-update/sa.json"); err != nil {
+
+	if err := os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", path); err != nil {
 		log.Fatal(err)
 	}
+
+	writeLog("GOOGLE_APPLICATION_CREDENTIALS set")
 }
 
 //if the IP change has been detected update the list of Master Authroized Networks in the GKE cluster
@@ -179,8 +184,6 @@ func setGKEIP(ip, displayName string) error {
 
 	if err != nil {
 		writeLog(err.Error())
-
-		log.Fatal(err)
 	}
 
 	var updatedCidirBlocks []*container.CidrBlock
@@ -218,13 +221,13 @@ func setGKEIP(ip, displayName string) error {
 		return err
 	}
 
-	writeLog("IP successfully updated in the gke cluster")
+	writeLog("IP successfully updated in the gke cluster\n")
 	return nil
 }
 
 //Parsing arguments at the start of the app
 func handleArgs() {
-	credentialPath = flag.String("path", "", "path for the google application credentials")
+	credentialPath = flag.String("service-account", "", "path for the service account for GOOGLE_APPLICATION_CREDENTIALS")
 	projectID = flag.String("project", "", "project id")
 	clusterID = flag.String("cluster", "", "clusterid")
 	clusterZone = flag.String("zone", "", "zone where the master lives")
